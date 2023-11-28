@@ -246,15 +246,14 @@ def insert_query(q):
     query = pd.DataFrame(index=normalized_term_freq_idf.index)
     query['tf'] = [term_counts.get(x, 0) for x in query.index]
     query['w_tf'] = query['tf'].apply(lambda x: get_weighted_term_freq(x))
-    product = normalized_term_freq_idf.multiply(query['w_tf'], axis=0)
-    query['idf'] = DF_IDF['idf'] * query['w_tf']
+    query['idf'] = DF_IDF['idf']
     query['tf_idf'] = query['w_tf'] * query['idf']
-    query['normalized'] = query['idf'] / np.sqrt((query['idf'] ** 2).sum())
+    query['normalized'] = query['tf_idf'] / np.sqrt((query['tf_idf'] ** 2).sum())
 
     print('Query Details:')
     print(query.loc[existing_query_terms])
 
-    product2 = product.multiply(query['normalized'], axis=0)
+    product2 = normalized_term_freq_idf.multiply(query['normalized'], axis=0)
     scores = {}
     for col in product2.columns:
         if 0 in product2[col].loc[existing_query_terms].values:
@@ -273,7 +272,7 @@ def insert_query(q):
     print('\nProduct sum:')
     print(product_result.sum())
     print('\nQuery Length:')
-    q_len = math.sqrt(sum([x ** 2 for x in query['idf'].loc[existing_query_terms]]))
+    q_len = math.sqrt(sum([x ** 2 for x in query['tf_idf'].loc[existing_query_terms]]))
     print(q_len)
     print('\nCosine Similarity:')
     print(product_result.sum())
