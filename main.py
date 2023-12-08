@@ -257,7 +257,11 @@ def insert_query(q):
         query_details.at[term, 'w_tf'] = get_weightedd_term_freq(query_details.at[term, 'tf'])
         query_details.at[term, 'idf'] = DF_IDF['idf'].get(term, 0)
         query_details.at[term, 'tf_idf'] = query_details.at[term, 'w_tf'] * query_details.at[term, 'idf']
-        query_details['normalized'] = query_details['tf_idf'] / np.sqrt((query_details['tf_idf'] ** 2).sum())
+        if (query_details['tf_idf'] ** 2).sum() != 0:
+            query_details['normalized'] = query_details['tf_idf'] / np.sqrt((query_details['tf_idf'] ** 2).sum())
+        else:
+            # Handle the case where the denominator is zero (e.g., set 'normalized' to NaN)
+            query_details['normalized'] = np.nan
     print('Query Details:')
     print(query_details)
 
