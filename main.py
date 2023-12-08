@@ -14,7 +14,6 @@ files_name = natsorted(os.listdir('DocumentCollection'))
 import nltk
 
 nltk.download('punkt')
-nltk.download('stopwords')
 stop_words = set(stopwords.words('english'))
 
 # Create a PorterStemmer instance
@@ -27,11 +26,9 @@ def preprocessing(doc):
 
     prepared_doc = []
     for term in token_docs:
-        # Remove stop words
-        if term not in stop_words:
-            # Apply stemming
-            stemmed_term = porter.stem(term)
-            prepared_doc.append(stemmed_term)
+        # Apply stemming
+        stemmed_term = porter.stem(term)
+        prepared_doc.append(stemmed_term)
     return prepared_doc
 
 
@@ -41,7 +38,7 @@ for files in files_name:
         document = f.read()
     document_of_terms.append(preprocessing(document))
 
-print('Terms after tokenization, removing stop words, and stemming:')
+print('Terms after tokenization, and stemming:')
 print(document_of_terms)
 
 # Ensure you apply stemming in the query_input function as well.
@@ -92,6 +89,7 @@ for document in document_of_terms:
 
 print('Positional index')
 print(positional_index)
+
 
 ### phrase Query ###
 # query = input('Input Phrase Query: ')
@@ -176,12 +174,12 @@ DF_IDF.index = term_freq.index
 print('IDF')
 print(DF_IDF)
 
-
 term_freq_inve_doc_freq = term_freq.multiply(DF_IDF['idf'], axis=0)
 print('TF.IDF')
 print(term_freq_inve_doc_freq)
 
 document_length = pd.DataFrame()
+
 
 ##############################################################################
 def get_docs_length(col):
@@ -216,6 +214,16 @@ print(normalized_term_freq_idf)
 def get_term_frequency(term):
     return term_freq.loc[term].sum()
 
+
+def get_weightedd_term_freq(x):
+    if isinstance(x, pd.Series):
+        return x.apply(lambda value: 1 + math.log10(value) if value > 0 else 0)
+    elif x > 0:
+        return 1 + math.log10(x)
+    else:
+        return 0
+
+
 def insert_query(q):
     terms_in_documents = set(normalized_term_freq_idf.index)
 
@@ -233,7 +241,7 @@ def insert_query(q):
             total_frequency = get_term_frequency(term)
             print(f'Term "{term}" exists in the query {count} times and in the documents {total_frequency} times.')
         else:
-            print(f'Term "{term}" does not exist in the documents.')
+            print(f'Term "{term}" exists in the query {count} times and does not exist in the documents.')
 
     # Filter out non-existing terms from the query
     existing_query_terms = [term for term in term_counts.keys() if term in terms_in_documents]
@@ -242,18 +250,18 @@ def insert_query(q):
         print('No valid terms found in the query. Exiting...')
         return
 
-    # Further processing for existing query terms
-    query = pd.DataFrame(index=normalized_term_freq_idf.index)
-    query['tf'] = [term_counts.get(x, 0) for x in query.index]
-    query['w_tf'] = query['tf'].apply(lambda x: get_weighted_term_freq(x))
-    query['idf'] = DF_IDF['idf']
-    query['tf_idf'] = query['w_tf'] * query['idf']
-    query['normalized'] = query['tf_idf'] / np.sqrt((query['tf_idf'] ** 2).sum())
-
+    # Handling normalized values
+    query_details = pd.DataFrame(index=term_counts, columns=['tf', 'w_tf', 'idf', 'tf_idf', 'normalized'])
+    for term in query_terms:
+        query_details.at[term, 'tf'] = term_counts.get(term, 0)
+        query_details.at[term, 'w_tf'] = get_weightedd_term_freq(query_details.at[term, 'tf'])
+        query_details.at[term, 'idf'] = DF_IDF['idf'].get(term, 0)
+        query_details.at[term, 'tf_idf'] = query_details.at[term, 'w_tf'] * query_details.at[term, 'idf']
+        query_details['normalized'] = query_details['tf_idf'] / np.sqrt((query_details['tf_idf'] ** 2).sum())
     print('Query Details:')
-    print(query.loc[existing_query_terms])
+    print(query_details)
 
-    product2 = normalized_term_freq_idf.multiply(query['normalized'], axis=0)
+    product2 = normalized_term_freq_idf.multiply(query_details['normalized'], axis=0)
     scores = {}
     for col in product2.columns:
         if 0 in product2[col].loc[existing_query_terms].values:
@@ -272,7 +280,7 @@ def insert_query(q):
     print('\nProduct sum:')
     print(product_result.sum())
     print('\nQuery Length:')
-    q_len = math.sqrt(sum([x ** 2 for x in query['tf_idf'].loc[existing_query_terms]]))
+    q_len = math.sqrt(sum([x ** 2 for x in query_details['tf_idf'].loc[existing_query_terms]]))
     print(q_len)
     print('\nCosine Similarity:')
     print(product_result.sum())
