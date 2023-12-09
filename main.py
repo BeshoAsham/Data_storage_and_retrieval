@@ -14,7 +14,6 @@ files_name = natsorted(os.listdir('DocumentCollection'))
 import nltk
 
 nltk.download('punkt')
-stop_words = set(stopwords.words('english'))
 
 # Create a PorterStemmer instance
 porter = PorterStemmer()
@@ -225,75 +224,87 @@ def get_weightedd_term_freq(x):
 
 
 def insert_query(q):
-    terms_in_documents = set(normalized_term_freq_idf.index)
+    # Check if the query is a phrase query
+    if ' ' in q:
+        terms_in_documents = set(normalized_term_freq_idf.index)
 
-    # Tokenize, remove stop words, and stem the query terms
-    query_terms = preprocessing(q)
+        # Tokenize, remove stop words, and stem the query terms
+        query_terms = preprocessing(q)
 
-    # Count the occurrences of each term in the query
-    term_counts = {}
-    for term in query_terms:
-        term_counts[term] = term_counts.get(term, 0) + 1
+        # Count the occurrences of each term in the query
+        term_counts = {}
+        for term in query_terms:
+            term_counts[term] = term_counts.get(term, 0) + 1
 
-    # Check if each query term exists in the documents
-    for term, count in term_counts.items():
-        if term in terms_in_documents:
-            total_frequency = get_term_frequency(term)
-            print(f'Term "{term}" exists in the query {count} times and in the documents {total_frequency} times.')
-        else:
-            print(f'Term "{term}" exists in the query {count} times and does not exist in the documents.')
+        # Check if each query term exists in the documents
+        for term, count in term_counts.items():
+            if term in terms_in_documents:
+                total_frequency = get_term_frequency(term)
+                print(f'Term "{term}" exists in the query {count} times and in the documents {total_frequency} times.')
+            else:
+                print(f'Term "{term}" exists in the query {count} times and does not exist in the documents.')
 
-    # Filter out non-existing terms from the query
-    existing_query_terms = [term for term in term_counts.keys() if term in terms_in_documents]
+        # Filter out non-existing terms from the query
+        existing_query_terms = [term for term in term_counts.keys() if term in terms_in_documents]
 
-    if not existing_query_terms:
-        print('No valid terms found in the query. Exiting...')
-        return
+        if not existing_query_terms:
+            print('No valid terms found in the phrase query. Exiting...')
+            return
 
-    # Handling normalized values
-    query_details = pd.DataFrame(index=term_counts, columns=['tf', 'w_tf', 'idf', 'tf_idf', 'normalized'])
-    for term in query_terms:
-        query_details.at[term, 'tf'] = term_counts.get(term, 0)
-        query_details.at[term, 'w_tf'] = get_weightedd_term_freq(query_details.at[term, 'tf'])
-        query_details.at[term, 'idf'] = DF_IDF['idf'].get(term, 0)
-        query_details.at[term, 'tf_idf'] = query_details.at[term, 'w_tf'] * query_details.at[term, 'idf']
-        if (query_details['tf_idf'] ** 2).sum() != 0:
-            query_details['normalized'] = query_details['tf_idf'] / np.sqrt((query_details['tf_idf'] ** 2).sum())
-        else:
-            # Handle the case where the denominator is zero (e.g., set 'normalized' to NaN)
-            query_details['normalized'] = np.nan
-    print('Query Details:')
-    print(query_details)
+        # Handling normalized values
+        query_details = pd.DataFrame(index=term_counts, columns=['tf', 'w_tf', 'idf', 'tf_idf', 'normalized'])
+        for term in query_terms:
+            query_details.at[term, 'tf'] = term_counts.get(term, 0)
+            query_details.at[term, 'w_tf'] = get_weightedd_term_freq(query_details.at[term, 'tf'])
+            query_details.at[term, 'idf'] = DF_IDF['idf'].get(term, 0)
+            query_details.at[term, 'tf_idf'] = query_details.at[term, 'w_tf'] * query_details.at[term, 'idf']
+            if (query_details['tf_idf'] ** 2).sum() != 0:
+                query_details['normalized'] = query_details['tf_idf'] / np.sqrt((query_details['tf_idf'] ** 2).sum())
+            else:
+                # Handle the case where the denominator is zero (e.g., set 'normalized' to NaN)
+                query_details['normalized'] = np.nan
 
-    product2 = normalized_term_freq_idf.multiply(query_details['normalized'], axis=0)
-    scores = {}
-    for col in product2.columns:
-        if 0 in product2[col].loc[existing_query_terms].values:
-            pass
-        else:
-            scores[col] = product2[col].sum()
+        print('Query Details:')
+        print(query_details)
 
-    if not scores:
-        print('No matching documents found.')
-        return
+        # Check if there are matched documents before proceeding with the cosine similarity calculation
+        positions = query_input(q)
+        if not positions:
+            print('No matching documents found for the phrase query.')
+            return
 
-    product_result = product2[list(scores.keys())].loc[existing_query_terms]
+        product2 = normalized_term_freq_idf.multiply(query_details['normalized'], axis=0)
+        scores = {}
+        for col in product2.columns:
+            if 0 in product2[col].loc[existing_query_terms].values:
+                pass
+            else:
+                scores[col] = product2[col].sum()
 
-    print('\nProduct (query * matched doc):')
-    print(product_result)
-    print('\nProduct sum:')
-    print(product_result.sum())
-    print('\nQuery Length:')
-    q_len = math.sqrt(sum([x ** 2 for x in query_details['tf_idf'].loc[existing_query_terms]]))
-    print(q_len)
-    print('\nCosine Similarity:')
-    print(product_result.sum())
-    print('\nReturned docs:')
+        # if not scores:
+        #     print('No matching documents found.')
+        #     return
 
-    sorted_scores = sorted(scores.items(), key=lambda x: x[1], reverse=True)
-    for doc_id, score in sorted_scores:
-        print(f'Doc {doc_id} - Score: {score}')
+        product_result = product2[list(scores.keys())].loc[existing_query_terms]
 
+        print('\nProduct (query * matched doc):')
+        print(product_result)
+        print('\nProduct sum:')
+        print(product_result.sum())
+        print('\nQuery Length:')
+        q_len = math.sqrt(sum([x ** 2 for x in query_details['tf_idf'].loc[existing_query_terms]]))
+        print(q_len)
+        print('\nCosine Similarity:')
+        print(product_result.sum())
+        print('\nReturned docs:')
 
-q = input('Input Query for print Query details and matched document: ')
+        sorted_scores = sorted(scores.items(), key=lambda x: x[1], reverse=True)
+        for doc_id, score in sorted_scores:
+            print(f'Doc {doc_id} - Score: {score}')
+
+    else:
+        print('The provided query is not a phrase query. Please enter a valid phrase query.')
+
+# Example usage
+q = input('Input Phrase Query for print Query details and matched document: ')
 insert_query(q)
