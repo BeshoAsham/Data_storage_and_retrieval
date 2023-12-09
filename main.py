@@ -306,5 +306,5 @@ def insert_query(q):
         print('The provided query is not a phrase query. Please enter a valid phrase query.')
 
 # Example usage
-q = input('Input Phrase Query for print Query details and matched document: ')
+q = input('Input Phrase Query for print Query details and matched document: ' )
 insert_query(q)
