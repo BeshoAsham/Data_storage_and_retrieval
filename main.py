@@ -1,19 +1,17 @@
 import os
+import nltk
 from nltk.tokenize import word_tokenize
-from nltk.corpus import stopwords
 from nltk.stem import PorterStemmer
 from natsort import natsorted
 import math
 import numpy as np
 import pandas as pd
-
+import re
 # Read files name
 files_name = natsorted(os.listdir('DocumentCollection'))
 
-# Download NLTK resources (you only need to do this once)
-import nltk
 
-nltk.download('punkt')
+# nltk.download('punkt')
 
 # Create a PorterStemmer instance
 porter = PorterStemmer()
@@ -89,36 +87,6 @@ for document in document_of_terms:
 print('Positional index')
 print(positional_index)
 
-
-### phrase Query ###
-# query = input('Input Phrase Query: ')
-
-def query_input(q):
-    lis = [[] for _ in range(10)]
-    for term in preprocessing(q):
-        if term in positional_index.keys():
-            for key in positional_index[term][1].keys():
-                if lis[key] != []:
-                    # Check if the current position is consecutive to the last one
-                    if lis[key][-1] + 1 == positional_index[term][1][key][0]:
-                        lis[key].append(positional_index[term][1][key][0])
-                    else:
-                        # If not consecutive, start a new sequence
-                        lis[key] = [positional_index[term][1][key][0]]
-                else:
-                    # If the list is empty, add the first position
-                    lis[key].append(positional_index[term][1][key][0])
-
-    positions = []
-    for pos, lst in enumerate(lis, start=1):
-        if len(lst) == len(preprocessing(q)):
-            positions.append(f'doc{pos}')
-
-    return positions
-
-
-# print(query_input(query))
-
 ######### Print Tables before input Query #############
 all_words = []
 for doc in document_of_terms:
@@ -158,7 +126,7 @@ weighted_term_freq.columns = ['doc ' + str(i) for i in range(1, 11)]
 
 print('Weighted TF')
 print(weighted_term_freq)
-######################################################################################################################
+############################################### DF_IDF #######################################################################
 DF_IDF = pd.DataFrame(columns=['df', 'idf'])
 
 for i in range(len(term_freq)):
@@ -172,15 +140,13 @@ for i in range(len(term_freq)):
 DF_IDF.index = term_freq.index
 print('IDF')
 print(DF_IDF)
-
+###################################### TF.IDF ######################################################
 term_freq_inve_doc_freq = term_freq.multiply(DF_IDF['idf'], axis=0)
 print('TF.IDF')
 print(term_freq_inve_doc_freq)
 
+##################################### Document Length #########################################
 document_length = pd.DataFrame()
-
-
-##############################################################################
 def get_docs_length(col):
     return np.sqrt(term_freq_inve_doc_freq[col].apply(lambda x: x ** 2).sum())
 
@@ -191,9 +157,8 @@ for column in term_freq_inve_doc_freq.columns:
 print('Document Length')
 print(document_length)
 ###############################################################################################
+
 normalized_term_freq_idf = pd.DataFrame()
-
-
 def get_normalized(col, x):
     try:
         return x / document_length[col + '_len'].values[0]
@@ -214,22 +179,36 @@ def get_term_frequency(term):
     return term_freq.loc[term].sum()
 
 
-def get_weightedd_term_freq(x):
-    if isinstance(x, pd.Series):
-        return x.apply(lambda value: 1 + math.log10(value) if value > 0 else 0)
-    elif x > 0:
-        return 1 + math.log10(x)
-    else:
-        return 0
+### phrase Query ###
+def phrase_Query(q):
+    lis = [[] for _ in range(10)]
+    for term in preprocessing(q):
+        if term in positional_index.keys():
+            for key in positional_index[term][1].keys():
+                if lis[key] != []:
+                    # Check if the current position is consecutive to the last one
+                    if lis[key][-1] + 1 == positional_index[term][1][key][0]:
+                        lis[key].append(positional_index[term][1][key][0])
+                    else:
+                        # If not consecutive, start a new sequence
+                        lis[key] = [positional_index[term][1][key][0]]
+                else:
+                    # If the list is empty, add the first position
+                    lis[key].append(positional_index[term][1][key][0])
+    #list of phrase query documents
+    positions = []
+    for pos, lst in enumerate(lis, start=1):
+        if len(lst) == len(preprocessing(q)):
+            positions.append(f'doc{pos}')
+
+    return positions
 
 
-# ... (your existing code)
-import re
-def process_phrase_query(phrase_query):
+def process_phrase_query(query):
     terms_in_documents = set(normalized_term_freq_idf.index)
 
-    # Tokenize, remove stop words, and stem the query terms
-    query_terms = preprocessing(phrase_query)
+    # Tokenize, and stem the query terms
+    query_terms = preprocessing(query)
 
     # Count the occurrences of each term in the query
     term_counts = {}
@@ -248,7 +227,7 @@ def process_phrase_query(phrase_query):
     existing_query_terms = [term for term in term_counts.keys() if term in terms_in_documents]
 
     if not existing_query_terms:
-        print('No valid terms found in the phrase query. Exiting...')
+        print(f'No valid terms found in the phrase query: {query}')
         return set()  # Return an empty set if no valid terms are found
 
     # Handling normalized values
@@ -269,9 +248,9 @@ def process_phrase_query(phrase_query):
     print(query_details)
 
     # Check if there are matched documents before proceeding with the cosine similarity calculation
-    positions = query_input(phrase_query)
+    positions = phrase_Query(query)
     if not positions:
-        print(f'No matching documents found for the phrase query: {phrase_query}')
+        print(f'No matching documents found for the phrase query: {query}')
         return set()  # Return an empty set if no matching documents are found
 
     product2 = normalized_term_freq_idf.multiply(query_details['normalized'], axis=0)
@@ -286,13 +265,11 @@ def process_phrase_query(phrase_query):
 
     print('\nProduct (query * matched doc):')
     print(product_result)
-    print('\nProduct sum:')
+    print('\nCosine Similarity:')
     print(product_result.sum())
     print('\nQuery Length:')
     q_len = math.sqrt(sum([x ** 2 for x in query_details['tf_idf'].loc[existing_query_terms]]))
     print(q_len)
-    print('\nCosine Similarity:')
-    print(product_result.sum())
     print('\nReturned docs:')
 
     sorted_scores = sorted(scores.items(), key=lambda x: x[1], reverse=True)
@@ -302,37 +279,42 @@ def process_phrase_query(phrase_query):
     return positions  # Return the document positions
 
 
-def insert_query(q):
-    boolean_operators = re.findall(r'\bAND\b|\bOR\b|\bNOT\b', q, flags=re.IGNORECASE)
+def process_boolean_query(boolean_query):
+    # Split the boolean query into sub-queries based on AND, OR, and NOT operators
+    sub_queries = re.split(r'\bAND\b|\bOR\b|\bNOT\b', boolean_query, flags=re.IGNORECASE)
+    sub_queries = [sub_query.strip() for sub_query in sub_queries if sub_query.strip()]
 
-    if not boolean_operators:
+    # Accumulate results for each sub-query individually
+    results = []
+    for sub_query in sub_queries:
+        result = process_phrase_query(sub_query)
+        results.append(result)
+
+    # Apply boolean operators to combine results at the end
+    combined_results = set(results[0])
+    operator_index = 1
+    for operator in re.finditer(r'\bAND\b|\bOR\b|\bNOT\b', boolean_query, flags=re.IGNORECASE):
+        current_operator = operator.group().upper()
+        result = set(results[operator_index])
+        if current_operator == 'AND':
+            combined_results &= result
+        elif current_operator == 'OR':
+            combined_results |= result
+        elif current_operator == 'NOT':
+            combined_results -= result
+        operator_index += 1
+
+    return combined_results
+
+def insert_query(q):
+    # Check if the query contains boolean operators
+    if re.search(r'\bAND\b|\bOR\b|\bNOT\b', q, flags=re.IGNORECASE):
+        results = process_boolean_query(q)
+        print('Final Result:', list(results))
+    else:
         # If there are no boolean operators, process a single phrase query
         process_phrase_query(q)
-    else:
-        # Split the query into sub-queries based on the boolean operators
-        sub_queries = re.split(r'\bAND\b|\bOR\b|\bNOT\b', q, flags=re.IGNORECASE)
-        sub_queries = [sub_query.strip() for sub_query in sub_queries if sub_query.strip()]
-
-        # Accumulate results for each sub-query individually
-        results = []
-        for sub_query in sub_queries:
-            result = process_phrase_query(sub_query)
-            results.append(result)
-
-        # Apply boolean operators to combine results at the end
-        combined_results = set(results[0])
-        for operator, result in zip(boolean_operators, results[1:]):
-            if operator.upper() == 'AND':
-                combined_results &= set(result)
-            elif operator.upper() == 'OR':
-                combined_results |= set(result)
-            elif operator.upper() == 'NOT':
-                combined_results -= set(result)
-
-        # Print the final combined results
-        print('Final Result:', list(combined_results))
-
 
 # Example usage
-q = input('Input Boolean Phrase Query (e.g., "apple AND orange OR banana NOT mango"): ')
+q = input('Input Phrase Query (Boolean operators are supported) : ')
 insert_query(q)
