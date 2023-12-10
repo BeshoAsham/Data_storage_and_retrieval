@@ -223,88 +223,116 @@ def get_weightedd_term_freq(x):
         return 0
 
 
-def insert_query(q):
-    # Check if the query is a phrase query
-    if ' ' in q:
-        terms_in_documents = set(normalized_term_freq_idf.index)
+# ... (your existing code)
+import re
+def process_phrase_query(phrase_query):
+    terms_in_documents = set(normalized_term_freq_idf.index)
 
-        # Tokenize, remove stop words, and stem the query terms
-        query_terms = preprocessing(q)
+    # Tokenize, remove stop words, and stem the query terms
+    query_terms = preprocessing(phrase_query)
 
-        # Count the occurrences of each term in the query
-        term_counts = {}
-        for term in query_terms:
-            term_counts[term] = term_counts.get(term, 0) + 1
+    # Count the occurrences of each term in the query
+    term_counts = {}
+    for term in query_terms:
+        term_counts[term] = term_counts.get(term, 0) + 1
 
-        # Check if each query term exists in the documents
-        for term, count in term_counts.items():
-            if term in terms_in_documents:
-                total_frequency = get_term_frequency(term)
-                print(f'Term "{term}" exists in the query {count} times and in the documents {total_frequency} times.')
-            else:
-                print(f'Term "{term}" exists in the query {count} times and does not exist in the documents.')
+    # Check if each query term exists in the documents
+    for term, count in term_counts.items():
+        if term in terms_in_documents:
+            total_frequency = get_term_frequency(term)
+            print(f'Term "{term}" exists in the query {count} times and in the documents {total_frequency} times.')
+        else:
+            print(f'Term "{term}" exists in the query {count} times and does not exist in the documents.')
 
-        # Filter out non-existing terms from the query
-        existing_query_terms = [term for term in term_counts.keys() if term in terms_in_documents]
+    # Filter out non-existing terms from the query
+    existing_query_terms = [term for term in term_counts.keys() if term in terms_in_documents]
 
-        if not existing_query_terms:
-            print('No valid terms found in the phrase query. Exiting...')
-            return
+    if not existing_query_terms:
+        print('No valid terms found in the phrase query. Exiting...')
+        return set()  # Return an empty set if no valid terms are found
 
-        # Handling normalized values
-        query_details = pd.DataFrame(index=term_counts, columns=['tf', 'w_tf', 'idf', 'tf_idf', 'normalized'])
-        for term in query_terms:
-            query_details.at[term, 'tf'] = term_counts.get(term, 0)
-            query_details.at[term, 'w_tf'] = get_weightedd_term_freq(query_details.at[term, 'tf'])
-            query_details.at[term, 'idf'] = DF_IDF['idf'].get(term, 0)
-            query_details.at[term, 'tf_idf'] = query_details.at[term, 'w_tf'] * query_details.at[term, 'idf']
-            if (query_details['tf_idf'] ** 2).sum() != 0:
-                query_details['normalized'] = query_details['tf_idf'] / np.sqrt((query_details['tf_idf'] ** 2).sum())
-            else:
-                # Handle the case where the denominator is zero (e.g., set 'normalized' to NaN)
-                query_details['normalized'] = np.nan
+    # Handling normalized values
+    query_details = pd.DataFrame(index=term_counts, columns=['tf', 'w_tf', 'idf', 'tf_idf', 'normalized'])
+    for term in query_terms:
+        query_details.at[term, 'tf'] = term_counts.get(term, 0)
+        query_details.at[term, 'w_tf'] = get_weighted_term_freq(query_details.at[term, 'tf'])
+        query_details.at[term, 'idf'] = DF_IDF['idf'].get(term, 0)
+        query_details.at[term, 'tf_idf'] = query_details.at[term, 'w_tf'] * query_details.at[term, 'idf']
 
-        print('Query Details:')
-        print(query_details)
-
-        # Check if there are matched documents before proceeding with the cosine similarity calculation
-        positions = query_input(q)
-        if not positions:
-            print('No matching documents found for the phrase query.')
-            return
-
-        product2 = normalized_term_freq_idf.multiply(query_details['normalized'], axis=0)
-        scores = {}
-        for col in product2.columns:
-            if 0 in product2[col].loc[existing_query_terms].values:
-                pass
-            else:
-                scores[col] = product2[col].sum()
-
-        # if not scores:
-        #     print('No matching documents found.')
-        #     return
-
-        product_result = product2[list(scores.keys())].loc[existing_query_terms]
-
-        print('\nProduct (query * matched doc):')
-        print(product_result)
-        print('\nProduct sum:')
-        print(product_result.sum())
-        print('\nQuery Length:')
-        q_len = math.sqrt(sum([x ** 2 for x in query_details['tf_idf'].loc[existing_query_terms]]))
-        print(q_len)
-        print('\nCosine Similarity:')
-        print(product_result.sum())
-        print('\nReturned docs:')
-
-        sorted_scores = sorted(scores.items(), key=lambda x: x[1], reverse=True)
-        for doc_id, score in sorted_scores:
-            print(f'Doc {doc_id} - Score: {score}')
-
+    if (query_details['tf_idf'] ** 2).sum() != 0:
+        query_details['normalized'] = query_details['tf_idf'] / np.sqrt((query_details['tf_idf'] ** 2).sum())
     else:
-        print('The provided query is not a phrase query. Please enter a valid phrase query.')
+        # Handle the case where the denominator is zero (e.g., set 'normalized' to NaN)
+        query_details['normalized'] = np.nan
+
+    print('Query Details:')
+    print(query_details)
+
+    # Check if there are matched documents before proceeding with the cosine similarity calculation
+    positions = query_input(phrase_query)
+    if not positions:
+        print(f'No matching documents found for the phrase query: {phrase_query}')
+        return set()  # Return an empty set if no matching documents are found
+
+    product2 = normalized_term_freq_idf.multiply(query_details['normalized'], axis=0)
+    scores = {}
+    for col in product2.columns:
+        if 0 in product2[col].loc[existing_query_terms].values:
+            pass
+        else:
+            scores[col] = product2[col].sum()
+
+    product_result = product2[list(scores.keys())].loc[existing_query_terms]
+
+    print('\nProduct (query * matched doc):')
+    print(product_result)
+    print('\nProduct sum:')
+    print(product_result.sum())
+    print('\nQuery Length:')
+    q_len = math.sqrt(sum([x ** 2 for x in query_details['tf_idf'].loc[existing_query_terms]]))
+    print(q_len)
+    print('\nCosine Similarity:')
+    print(product_result.sum())
+    print('\nReturned docs:')
+
+    sorted_scores = sorted(scores.items(), key=lambda x: x[1], reverse=True)
+    for doc_id, score in sorted_scores:
+        print(f'Doc {doc_id} - Score: {score}')
+
+    return positions  # Return the document positions
+
+
+def insert_query(q):
+    boolean_operators = re.findall(r'\bAND\b|\bOR\b|\bNOT\b', q, flags=re.IGNORECASE)
+
+    if not boolean_operators:
+        # If there are no boolean operators, process a single phrase query
+        process_phrase_query(q)
+    else:
+        # Split the query into sub-queries based on the boolean operators
+        sub_queries = re.split(r'\bAND\b|\bOR\b|\bNOT\b', q, flags=re.IGNORECASE)
+        sub_queries = [sub_query.strip() for sub_query in sub_queries if sub_query.strip()]
+
+        # Accumulate results for each sub-query individually
+        results = []
+        for sub_query in sub_queries:
+            result = process_phrase_query(sub_query)
+            results.append(result)
+
+        # Apply boolean operators to combine results at the end
+        combined_results = set(results[0])
+        for operator, result in zip(boolean_operators, results[1:]):
+            if operator.upper() == 'AND':
+                combined_results &= set(result)
+            elif operator.upper() == 'OR':
+                combined_results |= set(result)
+            elif operator.upper() == 'NOT':
+                combined_results -= set(result)
+
+        # Print the final combined results
+        print('Final Result:', list(combined_results))
+
 
 # Example usage
-q = input('Input Phrase Query for print Query details and matched document: ' )
+q = input('Input Boolean Phrase Query (e.g., "apple AND orange OR banana NOT mango"): ')
 insert_query(q)
