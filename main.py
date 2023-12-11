@@ -100,13 +100,12 @@ def get_term_freq(doc):
         words_found[word] += 1
     return words_found
 
-
 term_freq = pd.DataFrame(index=get_term_freq(document_of_terms[0]).keys())
 
 for i in range(0, len(document_of_terms)):
     term_freq[i] = get_term_freq(document_of_terms[i]).values()
 
-term_freq.columns = ['doc ' + str(i) for i in range(1, 11)]
+term_freq.columns = ['doc ' + str(i) for i in range(1, len(document_of_terms)+1)]
 print('TF')
 print(term_freq)
 
@@ -122,7 +121,7 @@ weighted_term_freq = pd.DataFrame(index=get_term_freq(document_of_terms[0]).keys
 
 for i in range(1, len(document_of_terms) + 1):
     weighted_term_freq[i] = term_freq['doc ' + str(i)].apply(get_weighted_term_freq)
-weighted_term_freq.columns = ['doc ' + str(i) for i in range(1, 11)]
+weighted_term_freq.columns = ['doc ' + str(i) for i in range(1, len(document_of_terms)+1)]
 
 print('Weighted TF')
 print(weighted_term_freq)
@@ -141,7 +140,7 @@ DF_IDF.index = term_freq.index
 print('IDF')
 print(DF_IDF)
 ###################################### TF.IDF ######################################################
-term_freq_inve_doc_freq = term_freq.multiply(DF_IDF['idf'], axis=0)
+term_freq_inve_doc_freq = weighted_term_freq.multiply(DF_IDF['idf'], axis=0)
 print('TF.IDF')
 print(term_freq_inve_doc_freq)
 
@@ -165,7 +164,6 @@ def get_normalized(col, x):
     except:
         return 0
 
-
 for column in term_freq_inve_doc_freq.columns:
     normalized_term_freq_idf[column] = term_freq_inve_doc_freq[column].apply(lambda x: get_normalized(column, x))
 
@@ -181,7 +179,7 @@ def get_term_frequency(term):
 
 ### phrase Query ###
 def phrase_Query(q):
-    lis = [[] for _ in range(10)]
+    lis = [[] for _ in range(len(document_of_terms))]
     for term in preprocessing(q):
         if term in positional_index.keys():
             for key in positional_index[term][1].keys():
@@ -310,7 +308,7 @@ def insert_query(q):
     # Check if the query contains boolean operators
     if re.search(r'\bAND\b|\bOR\b|\bNOT\b', q, flags=re.IGNORECASE):
         results = process_boolean_query(q)
-        print('Final Result:', list(results))
+        print('Final Result:', sorted(list(results)))
     else:
         # If there are no boolean operators, process a single phrase query
         process_phrase_query(q)
